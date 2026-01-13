@@ -50,33 +50,23 @@ En .NET 10 Blazor-baserad webbapplikation för felrapportering med SQL Server-da
 - **CreatorUserID** (Främmande nyckel → Users)
 - **StatusID** (Främmande nyckel → TicketStatus)
 
-## Krav
-
-- Docker och Docker Compose
-- .NET 10 SDK (för lokal utveckling)
 
 ## Installation och Körning
 
 ### Med Docker Compose (Rekommenderat)
 
-1. Klona projektet och navigera till projektmappen:
-```bash
-cd Projekt_3_felrapport
-```
 
-2. Starta alla tjänster (SQL Server, Backend, Frontend):
+1. Starta alla tjänster (SQL Server, Backend, Frontend):
 ```bash
 docker-compose up --build
 ```
 
-3. Vänta tills alla tjänster har startat (detta kan ta 1-2 minuter första gången)
-
-4. Öppna webbläsaren:
+2. Öppna webbläsaren:
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:7000
    - SQL Server: localhost:1433
 
-5. Stoppa tjänsterna:
+3. Stoppa tjänsterna:
 ```bash
 docker-compose down
 ```
@@ -133,35 +123,14 @@ Frontend körs nu på:
 
 För att testa admin-funktioner, skapa en admin-användare direkt i databasen eller ändra en befintlig användares roll till "Admin".
 
-**Med SQL Server Management Studio eller sqlcmd:**
+**Via termenalen kan du ändra statusen på ett konto till admin genom att skriva det här:**
 ```sql
-USE TicketReportingDB;
-UPDATE Users SET Role = 'Admin' WHERE Username = 'ditt_användarnamn';
+docker exec ticketreporting-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourPassword123!" -C -Q "USE TicketReportingDB; UPDATE Users SET Role = 'Admin' WHERE Username = 'EliasSaarenala'; SELECT UserID, Username, Role FROM Users;"
 ```
 
 Som Admin kan du:
 - Ändra status på rapporter via dropdown-menyn
 - Ta bort rapporter med "Ta bort"-knappen
-
-## API-Endpoints
-
-### Autentisering
-- `POST /api/auth/register` - Registrera ny användare
-  ```json
-  {
-    "username": "string",
-    "email": "string",
-    "password": "string"
-  }
-  ```
-
-- `POST /api/auth/login` - Logga in och få JWT-token
-  ```json
-  {
-    "username": "string",
-    "password": "string"
-  }
-  ```
 
 ### Tickets
 - `GET /api/tickets` - Hämta alla rapporter
@@ -205,14 +174,6 @@ Som Admin kan du:
 }
 ```
 
-## Säkerhet
-
-- Lösenord hashas med SHA256
-- JWT-tokens för autentisering (24 timmars giltighetstid)
-- Rollbaserad åtkomst-kontroll (RBAC)
-- CORS konfigurerat för frontend
-- SQL-injection skydd via Entity Framework
-
 ## Felsökning
 
 ### Docker-problem
@@ -235,16 +196,6 @@ cd Backend
 dotnet ef migrations add MigrationName
 dotnet ef database update
 ```
-
-### Portar används redan
-Om portarna 1433, 7000 eller 3000 redan används, ändra portmappningarna i docker-compose.yml.
-
-## Test-data
-
-Vid första körning skapas automatiskt tre statusar:
-- Ny (ID: 1)
-- Pågående (ID: 2)
-- Löst (ID: 3)
 
 ## Licens
 
