@@ -1,0 +1,404 @@
+@page "/"
+@rendermode InteractiveServer
+@using Frontend.Services
+@using Frontend.Models
+@inject AuthService AuthService
+@inject TicketService TicketService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Felrapportering</PageTitle>
+
+<div class="container mt-4">
+    @if (!isAuthenticated)
+    {
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>@(isRegistering ? "Registrera" : "Logga in")</h3>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">@errorMessage</div>
+                        }
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success">@successMessage</div>
+                        }
+
+                        <EditForm Model="this" OnValidSubmit="HandleAuthSubmit">
+                            <div class="mb-3">
+                                <label class="form-label">Användarnamn</label>
+                                <input @bind="username" class="form-control" required />
+                            </div>
+
+                            @if (isRegistering)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label">E-postadress</label>
+                                    <input @bind="email" type="email" class="form-control" required />
+                                </div>
+                            }
+
+                            <div class="mb-3">
+                                <label class="form-label">Lösenord</label>
+                                <input @bind="password" type="password" class="form-control" required />
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
+                                @(isLoading ? "Laddar..." : (isRegistering ? "Registrera" : "Logga in"))
+                            </button>
+                        </EditForm>
+
+                        <div class="text-center mt-3">
+                            @if (isRegistering)
+                            {
+                                <button class="btn btn-link" @onclick="() => ToggleRegister()">
+                                    Har du redan ett konto? Logga in
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-link" @onclick="() => ToggleRegister()">
+                                    Skapa ett konto här
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Felrapportering</h2>
+            <div>
+                <span class="me-3">Inloggad som: <strong>@currentUsername</strong> @(isAdmin ? "(Admin)" : "")</span>
+                <button class="btn btn-secondary" @onclick="Logout">Logga ut</button>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Rapportera nytt fel</h4>
+            </div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(ticketErrorMessage))
+                {
+                    <div class="alert alert-danger">@ticketErrorMessage</div>
+                }
+                @if (!string.IsNullOrEmpty(ticketSuccessMessage))
+                {
+                    <div class="alert alert-success">@ticketSuccessMessage</div>
+                }
+
+                <EditForm Model="this" OnValidSubmit="CreateTicket">
+                    <div class="mb-3">
+                        <label class="form-label">Titel</label>
+                        <input @bind="newTicketTitle" class="form-control" required maxlength="200" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Beskrivning</label>
+                        <textarea @bind="newTicketDescription" class="form-control" rows="4" required maxlength="2000"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" disabled="@isCreatingTicket">
+                        @(isCreatingTicket ? "Skapar..." : "Skicka rapport")
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h4>Alla felrapporter</h4>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-info mb-3" @onclick="LoadTickets">
+                    <span class="oi oi-reload"></span> Uppdatera lista
+                </button>
+
+                @if (tickets == null)
+                {
+                    <p><em>Laddar...</em></p>
+                }
+                else if (tickets.Count == 0)
+                {
+                    <p><em>Inga rapporter ännu.</em></p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Titel</th>
+                                    <th>Beskrivning</th>
+                                    <th>Skapad av</th>
+                                    <th>Datum</th>
+                                    <th>Status</th>
+                                    @if (isAdmin)
+                                    {
+                                        <th>Åtgärder</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ticket in tickets)
+                                {
+                                    <tr>
+                                        <td>@ticket.TicketID</td>
+                                        <td>@ticket.Title</td>
+                                        <td>@ticket.Description</td>
+                                        <td>@ticket.CreatorUsername</td>
+                                        <td>@ticket.DateCreated.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>
+                                            @if (isAdmin)
+                                            {
+                                                <select class="form-select form-select-sm" 
+                                                        value="@ticket.StatusID"
+                                                        @onchange="@(e => UpdateTicketStatus(ticket.TicketID, int.Parse(e.Value?.ToString() ?? "1")))">
+                                                    @foreach (var status in statuses)
+                                                    {
+                                                        <option value="@status.StatusID">@status.StatusName</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">@ticket.StatusName</span>
+                                            }
+                                        </td>
+                                        @if (isAdmin)
+                                        {
+                                            <td>
+                                                <button class="btn btn-danger btn-sm" 
+                                                        @onclick="() => DeleteTicket(ticket.TicketID)">
+                                                    Ta bort
+                                                </button>
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private bool isRegistering = false;
+    private bool isLoading = false;
+    private bool isCreatingTicket = false;
+
+    private string username = "";
+    private string email = "";
+    private string password = "";
+    private string currentUsername = "";
+
+    private string errorMessage = "";
+    private string successMessage = "";
+    private string ticketErrorMessage = "";
+    private string ticketSuccessMessage = "";
+
+    private string newTicketTitle = "";
+    private string newTicketDescription = "";
+
+    private List<TicketDto>? tickets;
+    private List<TicketStatus> statuses = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (isAuthenticated)
+            {
+                currentUsername = await AuthService.GetUsernameAsync() ?? "";
+                isAdmin = await AuthService.IsAdminAsync();
+                await LoadTickets();
+                await LoadStatuses();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void ToggleRegister()
+    {
+        isRegistering = !isRegistering;
+        errorMessage = "";
+        successMessage = "";
+    }
+
+    private async Task HandleAuthSubmit()
+    {
+        isLoading = true;
+        errorMessage = "";
+        successMessage = "";
+
+        try
+        {
+            if (isRegistering)
+            {
+                var success = await AuthService.RegisterAsync(username, email, password);
+                if (success)
+                {
+                    successMessage = "Registrering lyckades! Du kan nu logga in.";
+                    isRegistering = false;
+                    username = "";
+                    email = "";
+                    password = "";
+                }
+                else
+                {
+                    errorMessage = "Registrering misslyckades. Användarnamnet eller e-postadressen kan redan vara upptaget.";
+                }
+            }
+            else
+            {
+                var success = await AuthService.LoginAsync(username, password);
+                if (success)
+                {
+                    isAuthenticated = true;
+                    currentUsername = await AuthService.GetUsernameAsync() ?? "";
+                    isAdmin = await AuthService.IsAdminAsync();
+                    await LoadTickets();
+                    await LoadStatuses();
+                }
+                else
+                {
+                    errorMessage = "Inloggning misslyckades. Kontrollera användarnamn och lösenord.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ett fel uppstod: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        isAuthenticated = false;
+        isAdmin = false;
+        currentUsername = "";
+        tickets = null;
+        NavigationManager.NavigateTo("/", true);
+    }
+
+    private async Task CreateTicket()
+    {
+        isCreatingTicket = true;
+        ticketErrorMessage = "";
+        ticketSuccessMessage = "";
+
+        try
+        {
+            var success = await TicketService.CreateTicketAsync(newTicketTitle, newTicketDescription);
+            if (success)
+            {
+                ticketSuccessMessage = "Rapport skapad framgångsrikt!";
+                newTicketTitle = "";
+                newTicketDescription = "";
+                await LoadTickets();
+            }
+            else
+            {
+                ticketErrorMessage = "Kunde inte skapa rapporten. Kontrollera att du är inloggad.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ticketErrorMessage = $"Ett fel uppstod: {ex.Message}";
+        }
+        finally
+        {
+            isCreatingTicket = false;
+        }
+    }
+
+    private async Task LoadTickets()
+    {
+        try
+        {
+            tickets = await TicketService.GetTicketsAsync();
+        }
+        catch (Exception ex)
+        {
+            ticketErrorMessage = $"Kunde inte ladda rapporter: {ex.Message}";
+        }
+    }
+
+    private async Task LoadStatuses()
+    {
+        try
+        {
+            statuses = await TicketService.GetStatusesAsync();
+        }
+        catch (Exception ex)
+        {
+            ticketErrorMessage = $"Kunde inte ladda statusar: {ex.Message}";
+        }
+    }
+
+    private async Task UpdateTicketStatus(int ticketId, int statusId)
+    {
+        try
+        {
+            var success = await TicketService.UpdateTicketStatusAsync(ticketId, statusId);
+            if (success)
+            {
+                await LoadTickets();
+            }
+            else
+            {
+                ticketErrorMessage = "Kunde inte uppdatera status.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ticketErrorMessage = $"Ett fel uppstod: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteTicket(int ticketId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Är du säker på att du vill ta bort rapport #{ticketId}?");
+        
+        if (confirmed)
+        {
+            try
+            {
+                var success = await TicketService.DeleteTicketAsync(ticketId);
+                if (success)
+                {
+                    ticketSuccessMessage = "Rapport borttagen!";
+                    await LoadTickets();
+                }
+                else
+                {
+                    ticketErrorMessage = "Kunde inte ta bort rapporten.";
+                }
+            }
+            catch (Exception ex)
+            {
+                ticketErrorMessage = $"Ett fel uppstod: {ex.Message}";
+            }
+        }
+    }
+}

@@ -1,0 +1,62 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ticketreporting-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourPassword123!
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - ticketreporting-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourPassword123!" -Q "SELECT 1" -C || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: ticketreporting-backend
+    ports:
+      - "7000:7000"
+      - "7001:7001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:7000
+      - "ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=TicketReportingDB;User Id=sa;Password=YourPassword123!;TrustServerCertificate=True;"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - ticketreporting-network
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: ticketreporting-frontend
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:3000
+      - ApiBaseAddress=http://backend:7000
+    depends_on:
+      - backend
+    networks:
+      - ticketreporting-network
+
+networks:
+  ticketreporting-network:
+    driver: bridge
+
+volumes:
+  sqlserver_data:
